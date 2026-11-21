@@ -11,6 +11,7 @@ import { responseTime } from '@/middleware/responseTime.middleware';
 import { notFoundHandler } from '@/middleware/notFound.middleware';
 import { DEFAULT_ROLE_LIMITS, roleRateLimit } from '@/middleware/rateLimit.middleware';
 import analyticsRoutes from '@/routes/analytics.routes';
+import merchantRoutes from '@/routes/merchant.routes';
 import auditRoutes from '@/routes/audit.routes';
 import authRoutes from '@/routes/auth.routes';
 import customerRoutes from '@/routes/customers.routes';
@@ -49,6 +50,19 @@ export function createApp(): express.Express {
   );
   app.use(express.json({ limit: '100kb' }));
   app.use('/api', auditTrail);
+  // Compress all responses larger than 1 KB (#155). The filter skips
+  // already-compressed content types (images, video, zip) so the CPU cost of
+  // attempting a second compression pass is never paid for binary downloads.
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
+        const type = res.getHeader('Content-Type');
+        if (typeof type === 'string' && /image|video|audio|zip|gzip|br/.test(type)) return false;
+        return compression.filter(req, res);
+      },
+    }),
+  );
   app.use(responseTime);
   app.use(compression());
   if (!config.isTest) {
@@ -84,6 +98,7 @@ export function createApp(): express.Express {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/search', searchRoutes);
   app.use('/api/v1/audit', auditRoutes);
+  app.use('/api/v1/merchant', merchantRoutes);
   app.use('/api/v1/queues', queueRoutes);
   app.use(unsupportedApiVersion(['1']));
 
