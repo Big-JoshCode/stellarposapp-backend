@@ -80,4 +80,15 @@ export const UserModel = {
         .run(fields.passwordHash, id);
     }
   },
+
+  /** Soft-deactivate: sets active = 0, preventing login (#148). */
+  deactivate(id: string): void {
+    getDb().prepare('UPDATE users SET active = 0 WHERE id = ?').run(id);
+  },
+
+  isActive(id: string): boolean {
+    const row = getDb().prepare('SELECT active FROM users WHERE id = ?').get(id) as
+      { active: number } | undefined;
+    return row?.active === 1;
+  },
 };

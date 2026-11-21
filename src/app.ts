@@ -12,11 +12,14 @@ import analyticsRoutes from '@/routes/analytics.routes';
 import auditRoutes from '@/routes/audit.routes';
 import authRoutes from '@/routes/auth.routes';
 import customerRoutes from '@/routes/customers.routes';
+import disputeRoutes from '@/routes/disputes.routes';
 import paymentRoutes from '@/routes/payments.routes';
 import productRoutes from '@/routes/products.routes';
 import searchRoutes from '@/routes/search.routes';
+import stellarRoutes from '@/routes/stellar.routes';
 import storeRoutes from '@/routes/store.routes';
 import transactionRoutes from '@/routes/transactions.routes';
+import transactionStreamRoutes from '@/routes/transactionStream.routes';
 import userRoutes from '@/routes/users.routes';
 import { connections } from '@/services/realtime';
 import { isDatabaseHealthy } from '@/utils/database';
@@ -79,6 +82,9 @@ export function createApp(): express.Express {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/search', searchRoutes);
   app.use('/api/v1/audit', auditRoutes);
+  app.use('/api/v1/disputes', disputeRoutes);
+  app.use('/api/v1/stellar', stellarRoutes);
+  app.use('/api/v1/transactions', transactionStreamRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
