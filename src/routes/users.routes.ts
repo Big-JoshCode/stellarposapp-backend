@@ -11,5 +11,6 @@ router.use(authenticate, authorize('admin'));
 router.get('/', asyncHandler(auth.listStaff));
 router.post('/', validateBody(createStaffSchema), asyncHandler(auth.createStaff));
 router.patch('/:id/role', validateBody(updateRoleSchema), asyncHandler(auth.updateStaffRole));
+router.delete('/:id', asyncHandler(auth.deactivateStaff));
 
 export default router;
