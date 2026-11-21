@@ -7,7 +7,8 @@ import { startBackupSchedule, stopBackupSchedule } from '@/utils/backup';
 import { closeDatabase, connectDatabase } from '@/utils/database';
 import { logger } from '@/utils/logger';
 import { connectRedis } from '@/utils/redis';
-import { closeQueues, setupQueues } from '@/utils/queue';
+import { closeQueues, flushQueues, setupQueues } from '@/utils/queue';
+import { createShutdown } from '@/utils/shutdown';
 import { startEmailWorker } from '@/services/email.service';
 
 export { app };
@@ -28,19 +29,24 @@ async function start(): Promise<void> {
   });
 }
 
-async function shutdown(signal: string): Promise<void> {
-  logger.info(`${signal} received, shutting down`);
-  stopPaymentWatcher();
-  stopBackupSchedule();
-  closeQueues();
-  await closeRealtime();
-  server.close(() => {
+const shutdown = createShutdown({
+  server,
+  timeoutMs: config.shutdown.timeoutMs,
+  flushTimeoutMs: config.shutdown.timeoutMs,
+  stopBackground: () => {
+    stopPaymentWatcher();
+    stopBackupSchedule();
+  },
+  flushJobs: (timeoutMs) => flushQueues(timeoutMs),
+  release: async () => {
+    await closeRealtime();
+    closeQueues();
     closeDatabase();
-    process.exit(0);
-  });
-  // Do not hang forever on open keep-alive connections.
-  setTimeout(() => process.exit(1), 10_000).unref();
-}
+  },
+  exit: (code) => process.exit(code),
+  log: (message) => logger.info(message),
+  warn: (message) => logger.warn(message),
+});
 
 if (require.main === module) {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
