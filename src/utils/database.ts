@@ -134,6 +134,17 @@ CREATE TABLE IF NOT EXISTS user_totp (
   enabled_at TEXT
 );
 
+-- Proof of GDPR erasure. Holds record ids, counts and a digest, never personal data.
+CREATE TABLE IF NOT EXISTS deletion_receipts (
+  id TEXT PRIMARY KEY,
+  subject_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deletion_receipts_subject ON deletion_receipts(subject_id);
+
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
