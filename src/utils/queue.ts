@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { logger } from '@/utils/logger';
 
 type Handler<T> = (data: T) => Promise<void> | void;
@@ -10,8 +11,14 @@ export interface JobOptions {
 }
 
 export interface FailedJob<T> {
+  /** Stable id used to inspect and requeue the entry. */
+  id: string;
+  /** Name of the queue the job failed in. */
+  queue: string;
   data: T;
   error: string;
+  /** Stack trace of the final failure, when the thrown value had one. */
+  stack?: string;
   attempts: number;
   failedAt: string;
 }
@@ -67,6 +74,20 @@ export class MemoryQueue<T = unknown> {
   }
 
   /** Jobs still running, waiting for a processor, or scheduled for a retry. */
+  /**
+   * Moves a dead-letter entry back onto the queue with a fresh attempt budget.
+   * Returns false when no entry has that id.
+   */
+  requeue(id: string): boolean {
+    const index = this.dead.findIndex((job) => job.id === id);
+    if (index === -1) return false;
+    const [job] = this.dead.splice(index, 1);
+    logger.info(`Queue ${this.name}: requeued dead-letter job ${id}`);
+    this.add(job.data);
+    return true;
+  }
+
+  /** Jobs still running or scheduled for a retry. */
   get pending(): number {
     return this.active + this.scheduled.size + this.waiting.length;
   }
@@ -139,7 +160,8 @@ export class MemoryQueue<T = unknown> {
       try {
         await this.handler!(data);
       } catch (err) {
-        const error = (err as Error).message;
+        const error = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
         if (attempt < opts.attempts) {
           const delay = opts.backoffMs * 2 ** (attempt - 1);
           logger.warn(
@@ -153,7 +175,15 @@ export class MemoryQueue<T = unknown> {
           this.scheduled.set(timer, { data, opts, attempt: attempt + 1 });
         } else {
           logger.error(`Queue ${this.name}: job failed after ${attempt} attempts`, { error });
-          this.dead.unshift({ data, error, attempts: attempt, failedAt: new Date().toISOString() });
+          this.dead.unshift({
+            id: randomUUID(),
+            queue: this.name,
+            data,
+            error,
+            stack,
+            attempts: attempt,
+            failedAt: new Date().toISOString(),
+          });
           this.dead.length = Math.min(this.dead.length, MAX_DEAD);
         }
       } finally {
@@ -192,4 +222,22 @@ export async function flushQueues(timeoutMs: number): Promise<number> {
 
 export function closeQueues(): void {
   queues?.forEach((q) => q.close());
+}
+
+/** Dead-letter entries across all queues (or one), newest first. */
+export function listDeadLetters(queue?: QueueName): FailedJob<unknown>[] {
+  if (!queues) return [];
+  const sources = queue ? [queues.get(queue)] : [...queues.values()];
+  return sources
+    .flatMap((q) => (q ? q.dead : []))
+    .sort((a, b) => b.failedAt.localeCompare(a.failedAt));
+}
+
+/** Requeues a dead-letter entry on its owning queue. False when the id is unknown. */
+export function requeueDeadLetter(id: string): boolean {
+  if (!queues) return false;
+  for (const q of queues.values()) {
+    if (q.requeue(id)) return true;
+  }
+  return false;
 }

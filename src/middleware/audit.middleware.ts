@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { StatementSync } from 'node:sqlite';
 import { verifyToken } from '@/middleware/auth.middleware';
 import { getDb } from '@/utils/database';
 import { logger } from '@/utils/logger';
@@ -8,6 +9,18 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // GDPR erasure is skipped too: the audit row would be written after the erasure
 // and would put the subject's email back. The erasure receipt is the record instead.
 const SKIP = [/^\/api\/v1\/auth\/(login|register)$/, /^\/api\/v1\/users\/[^/]+\/data$/];
+
+// Prepared once at module load, not on every request (#156). SQLite's
+// `prepare()` parses the SQL, compiles it to bytecode and caches the plan —
+// doing that work inside `res.on('finish', …)` adds synchronous CPU cost to
+// every mutating request's response path.
+let auditStmt: StatementSync | null = null;
+function getAuditStmt(): StatementSync {
+  auditStmt ??= getDb().prepare(
+    'INSERT INTO audit_log (user_id, user_email, role, action, path, status, ip) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+  return auditStmt;
+}
 
 /**
  * Records every successful state-changing API call: who, what, when, from
@@ -30,19 +43,15 @@ export function auditTrail(req: Request, res: Response, next: NextFunction): voi
       }
     }
     try {
-      getDb()
-        .prepare(
-          'INSERT INTO audit_log (user_id, user_email, role, action, path, status, ip) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        )
-        .run(
-          user.sub ?? null,
-          user.email ?? null,
-          user.role ?? null,
-          req.method,
-          path,
-          res.statusCode,
-          req.ip ?? null,
-        );
+      getAuditStmt().run(
+        user.sub ?? null,
+        user.email ?? null,
+        user.role ?? null,
+        req.method,
+        path,
+        res.statusCode,
+        req.ip ?? null,
+      );
     } catch (err) {
       logger.error(`Audit write failed: ${(err as Error).message}`);
     }

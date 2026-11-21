@@ -10,6 +10,7 @@ import { connectRedis } from '@/utils/redis';
 import { closeQueues, flushQueues, setupQueues } from '@/utils/queue';
 import { createShutdown } from '@/utils/shutdown';
 import { startEmailWorker } from '@/services/email.service';
+import { startSettlementSchedule, stopSettlementSchedule } from '@/services/settlement.service';
 
 export { app };
 
@@ -23,6 +24,7 @@ async function start(): Promise<void> {
   attachRealtime(server);
   startPaymentWatcher();
   startBackupSchedule();
+  startSettlementSchedule();
 
   server.listen(config.port, () => {
     logger.info(`StellarPOS API listening on http://localhost:${config.port} (${config.env})`);
@@ -41,6 +43,14 @@ const shutdown = createShutdown({
   release: async () => {
     await closeRealtime();
     closeQueues();
+async function shutdown(signal: string): Promise<void> {
+  logger.info(`${signal} received, shutting down`);
+  stopPaymentWatcher();
+  stopBackupSchedule();
+  stopSettlementSchedule();
+  closeQueues();
+  await closeRealtime();
+  server.close(() => {
     closeDatabase();
   },
   exit: (code) => process.exit(code),

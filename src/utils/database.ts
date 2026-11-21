@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier')),
+  active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,6 +66,11 @@ CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 -- Analytics filter completed sales by date; customer pages list a customer's sales.
 CREATE INDEX IF NOT EXISTS idx_transactions_status_created ON transactions(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id, created_at);
+-- Merchant (user) dashboard filters by user_id; composite with created_at covers date-range queries.
+CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at);
+-- PERF-016: dashboard and reporting queries filter by merchant (user_id), status, and date range
+-- together; without this composite index each predicate is applied sequentially on a full scan.
+CREATE INDEX IF NOT EXISTS idx_transactions_user_status_created ON transactions(user_id, status, created_at);
 
 CREATE TABLE IF NOT EXISTS transaction_items (
   id TEXT PRIMARY KEY,
@@ -149,6 +155,29 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Stellar account links per staff member (#145).
+CREATE TABLE IF NOT EXISTS user_stellar (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  stellar_public_key TEXT NOT NULL,
+  linked_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Transaction dispute workflow (#141).
+CREATE TABLE IF NOT EXISTS disputes (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES transactions(id),
+  opened_by TEXT NOT NULL REFERENCES users(id),
+  reason TEXT NOT NULL CHECK (reason IN ('incorrect_amount','duplicate_charge','item_not_received','other')),
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','under_review','resolved','rejected')),
+  resolution_note TEXT,
+  resolved_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_disputes_tx ON disputes(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_disputes_status ON disputes(status, created_at);
 `;
 
 export async function connectDatabase(path: string = config.database.path): Promise<DatabaseSync> {

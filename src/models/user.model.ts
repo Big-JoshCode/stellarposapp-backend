@@ -62,6 +62,13 @@ export const UserModel = {
     return rows.map((r) => toPublicUser(toUser(r)));
   },
 
+  listPaged(offset: number, limit: number): PublicUser[] {
+    const rows = getDb()
+      .prepare('SELECT * FROM users ORDER BY created_at LIMIT ? OFFSET ?')
+      .all(limit, offset) as unknown as UserRow[];
+    return rows.map((r) => toPublicUser(toUser(r)));
+  },
+
   count(): number {
     return (getDb().prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
   },
@@ -99,5 +106,14 @@ export const UserModel = {
     getDb()
       .prepare("UPDATE users SET name = '[deleted user]', email = ?, password_hash = ? WHERE id = ?")
       .run(placeholderEmail, unusableHash, id);
+  /** Soft-deactivate: sets active = 0, preventing login (#148). */
+  deactivate(id: string): void {
+    getDb().prepare('UPDATE users SET active = 0 WHERE id = ?').run(id);
+  },
+
+  isActive(id: string): boolean {
+    const row = getDb().prepare('SELECT active FROM users WHERE id = ?').get(id) as
+      { active: number } | undefined;
+    return row?.active === 1;
   },
 };

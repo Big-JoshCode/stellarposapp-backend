@@ -31,5 +31,9 @@ router.patch(
 // GDPR erasure (issue #213). Returns a receipt with a digest over the affected record ids.
 router.delete('/:id/data', selfOrAdmin, asyncHandler(gdpr.eraseUser));
 router.get('/:id/data/receipts/:receiptId', selfOrAdmin, asyncHandler(gdpr.getErasureReceipt));
+router.get('/', asyncHandler(auth.listStaff));
+router.post('/', validateBody(createStaffSchema), asyncHandler(auth.createStaff));
+router.patch('/:id/role', validateBody(updateRoleSchema), asyncHandler(auth.updateStaffRole));
+router.delete('/:id', asyncHandler(auth.deactivateStaff));
 
 export default router;
