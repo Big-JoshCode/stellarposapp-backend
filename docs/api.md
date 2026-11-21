@@ -4,6 +4,8 @@ Base URL: `http://localhost:3000/api/v1`. Send JSON with
 `Content-Type: application/json`. Authenticated routes need
 `Authorization: Bearer <token>` from `/auth/login` or `/auth/register`.
 
+**Versioning.** See the [versioning policy](versioning.md) for breaking changes and deprecation.
+
 **Envelope.** Success responses look like `{ "success": true, "data": ... }`.
 Errors look like `{ "success": false, "error": "message", "details"?: [{ "field", "message" }] }`.
 Paginated lists add `"pagination": { "page", "limit", "total", "pages" }`

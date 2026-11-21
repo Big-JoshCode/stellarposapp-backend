@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from '@/config/config';
+import { apiVersion, unsupportedApiVersion } from '@/middleware/apiVersion.middleware';
 import { auditTrail } from '@/middleware/audit.middleware';
 import { errorHandler } from '@/middleware/error.middleware';
 import { notFoundHandler } from '@/middleware/notFound.middleware';
@@ -70,6 +71,7 @@ export function createApp(): express.Express {
     });
   });
 
+  app.use('/api/v1', apiVersion('1'));
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/store', storeRoutes);
@@ -81,6 +83,7 @@ export function createApp(): express.Express {
   app.use('/api/v1/search', searchRoutes);
   app.use('/api/v1/audit', auditRoutes);
   app.use('/api/v1/queues', queueRoutes);
+  app.use(unsupportedApiVersion(['1']));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

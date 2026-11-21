@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - Dead-letter queue inspection and requeue: failed jobs keep id, payload, error, stack and timestamp; admin endpoints `GET /api/v1/queues/dead-letters` and `POST /api/v1/queues/dead-letters/:id/requeue` (#211).
+- API versioning policy (`docs/versioning.md`), an `X-API-Version` header on `/api/v1` responses, and a 404 listing supported versions for unknown `/api/v<N>` paths (#212).
 
 ## [0.2.0]
 
