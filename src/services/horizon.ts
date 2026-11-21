@@ -5,6 +5,12 @@
  */
 import { Horizon, NotFoundError } from '@stellar/stellar-sdk';
 import { config } from '@/config/config';
+import { getRedis } from '@/utils/redis';
+
+/** TTL for cached account balance data (#154). Short so stale balances are
+ *  not served for long; long enough to absorb repeated calls within one
+ *  checkout flow without hitting the Horizon rate limit. */
+const BALANCE_CACHE_TTL_SECONDS = 5;
 
 let server: Horizon.Server | null = null;
 const horizon = (): Horizon.Server => (server ??= new Horizon.Server(config.stellar.horizonUrl));
@@ -122,12 +128,31 @@ export async function fetchPaymentsInTransaction(hash: string): Promise<Incoming
 }
 
 export async function loadBalances(account: string): Promise<Balance[]> {
+  // Cache Horizon account lookups to avoid repeated API calls for the same
+  // account within a short window (#154). The 5-second TTL keeps balances
+  // fresh enough for checkout flows while absorbing burst traffic.
+  const cacheKey = `stellar:balances:${account}`;
+  try {
+    const cached = await getRedis().get(cacheKey);
+    if (cached) return JSON.parse(cached) as Balance[];
+  } catch {
+    // Cache miss or Redis error — fall through to live fetch.
+  }
+
   const acct = await horizon().loadAccount(account);
-  return acct.balances.map((b) =>
+  const balances = acct.balances.map((b) =>
     b.asset_type === 'native'
       ? { assetCode: 'XLM', assetIssuer: null, balance: b.balance }
       : 'asset_code' in b
         ? { assetCode: b.asset_code, assetIssuer: b.asset_issuer, balance: b.balance }
         : { assetCode: b.asset_type, assetIssuer: null, balance: b.balance },
   );
+
+  try {
+    await getRedis().set(cacheKey, JSON.stringify(balances), BALANCE_CACHE_TTL_SECONDS);
+  } catch {
+    // Best-effort cache write; a failed write still returns the live data.
+  }
+
+  return balances;
 }
