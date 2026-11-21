@@ -85,6 +85,19 @@ export const config = {
       merchantRegistry: str('STELLAR_MERCHANT_REGISTRY_ID', ''),
     },
   },
+  health: {
+    // Upper bound for each dependency probe behind GET /health and /healthz.
+    timeoutMs: int('HEALTH_CHECK_TIMEOUT_MS', 1000),
+  },
+  metrics: {
+    // Optional. When set, GET /metrics requires "Authorization: Bearer <token>".
+    token: str('METRICS_TOKEN', ''),
+  },
+  shutdown: {
+    // SIGTERM: how long in-flight requests get to finish, and separately how long
+    // the job queue gets to flush. After the first request deadline, open sockets are cut.
+    timeoutMs: int('SHUTDOWN_TIMEOUT_MS', 10_000),
+  },
 } as const;
 
 if (config.isProd && config.jwt.secret.length < 32) {
@@ -95,6 +108,12 @@ if (config.email.provider === 'resend' && !config.email.apiKey) {
 }
 if (config.store.taxRateBps < 0 || config.store.taxRateBps > 10_000) {
   throw new Error('TAX_RATE_BPS must be between 0 and 10000');
+}
+if (config.health.timeoutMs <= 0) {
+  throw new Error('HEALTH_CHECK_TIMEOUT_MS must be greater than 0');
+}
+if (config.shutdown.timeoutMs <= 0) {
+  throw new Error('SHUTDOWN_TIMEOUT_MS must be greater than 0');
 }
 
 export type Config = typeof config;
