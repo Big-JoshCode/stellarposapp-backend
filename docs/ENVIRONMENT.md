@@ -66,6 +66,14 @@ whole numbers, or the server refuses to start.
 | `STELLAR_PAYMENT_PROCESSOR_ID` | empty | Optional. Contract ID of the payment processor, from the contracts repo's `deployments/<network>.json`. Exposed in `GET /api/v1/store`. |
 | `STELLAR_MERCHANT_REGISTRY_ID` | empty | Optional. Contract ID of the merchant registry, from the same file. Exposed in `GET /api/v1/store`. |
 
+## Operations
+
+| Variable | Default | Description |
+|---|---|---|
+| `HEALTH_CHECK_TIMEOUT_MS` | `1000` | Longest wait for each dependency probe behind `GET /health` and `GET /healthz` (database, Horizon). A probe that exceeds it counts as down. |
+| `METRICS_TOKEN` | empty | Optional. When set, `GET /metrics` requires `Authorization: Bearer <token>`. Empty leaves the endpoint open, so keep it on a private network. |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | On `SIGTERM` or `SIGINT`: milliseconds in-flight requests may run before their sockets are cut. The job queue then gets the same budget to flush. Must be greater than 0. |
+
 ## Scripts only
 
 | Variable | Default | Description |

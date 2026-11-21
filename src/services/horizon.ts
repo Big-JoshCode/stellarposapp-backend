@@ -195,3 +195,18 @@ export async function loadBalances(account: string): Promise<Balance[]> {
     );
   });
 }
+
+/**
+ * Cheap reachability check for /health: one GET on the Horizon root, aborted
+ * after `timeoutMs`. Resolves when Horizon answers 2xx; throws otherwise. The
+ * error is for the server log only and must never be echoed to clients.
+ */
+export async function probeHorizon(timeoutMs: number): Promise<void> {
+  const res = await fetch(config.stellar.horizonUrl, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  await res.body?.cancel();
+  if (!res.ok) throw new Error(`Horizon responded with HTTP ${res.status}`);
+}
