@@ -9,6 +9,7 @@ import { logger } from '@/utils/logger';
 import { connectRedis } from '@/utils/redis';
 import { closeQueues, setupQueues } from '@/utils/queue';
 import { startEmailWorker } from '@/services/email.service';
+import { startSettlementSchedule, stopSettlementSchedule } from '@/services/settlement.service';
 
 export { app };
 
@@ -22,6 +23,7 @@ async function start(): Promise<void> {
   attachRealtime(server);
   startPaymentWatcher();
   startBackupSchedule();
+  startSettlementSchedule();
 
   server.listen(config.port, () => {
     logger.info(`StellarPOS API listening on http://localhost:${config.port} (${config.env})`);
@@ -32,6 +34,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received, shutting down`);
   stopPaymentWatcher();
   stopBackupSchedule();
+  stopSettlementSchedule();
   closeQueues();
   await closeRealtime();
   server.close(() => {
