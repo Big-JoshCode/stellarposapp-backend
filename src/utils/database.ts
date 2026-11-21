@@ -65,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 -- Analytics filter completed sales by date; customer pages list a customer's sales.
 CREATE INDEX IF NOT EXISTS idx_transactions_status_created ON transactions(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id, created_at);
+-- Merchant (user) dashboard filters by user_id; composite with created_at covers date-range queries.
+CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS transaction_items (
   id TEXT PRIMARY KEY,
