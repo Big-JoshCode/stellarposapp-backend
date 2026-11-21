@@ -66,6 +66,15 @@ export const UserModel = {
     return (getDb().prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
   },
 
+  /** Number of sales recorded by this user. Those sales stay; only the user row is anonymised. */
+  countSales(id: string): number {
+    return (
+      getDb().prepare('SELECT COUNT(*) AS n FROM transactions WHERE user_id = ?').get(id) as {
+        n: number;
+      }
+    ).n;
+  },
+
   updateRole(id: string, role: Role): void {
     getDb().prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   },
@@ -79,5 +88,16 @@ export const UserModel = {
         .prepare('UPDATE users SET password_hash = ? WHERE id = ?')
         .run(fields.passwordHash, id);
     }
+  },
+
+  /**
+   * Replaces the personal fields of a user row. The row itself stays so that
+   * sales, audit entries and other references keep pointing at a valid user.
+   * The caller passes an email no one can sign in with and an unguessable hash.
+   */
+  anonymise(id: string, placeholderEmail: string, unusableHash: string): void {
+    getDb()
+      .prepare("UPDATE users SET name = '[deleted user]', email = ?, password_hash = ? WHERE id = ?")
+      .run(placeholderEmail, unusableHash, id);
   },
 };
