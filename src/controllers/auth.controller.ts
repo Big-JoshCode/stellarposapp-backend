@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { AppError, conflict, notFound } from '@/middleware/error.middleware';
 import { signToken } from '@/middleware/auth.middleware';
 import { toPublicUser, UserModel, type Role, type User } from '@/models/user.model';
-import { sendSuccess } from '@/utils/helpers';
+import { paginatedResponse, parsePagination, sendSuccess } from '@/utils/helpers';
 import * as twoFactor from '@/controllers/twoFactor.controller';
 import { issueChallenge } from '@/controllers/twoFactor.controller';
 import { TwoFactorModel } from '@/models/twoFactor.model';
@@ -44,6 +44,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Same message either way so the response does not reveal which emails exist.
   const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
   if (!user || !ok) throw new AppError('Invalid email or password', 401);
+  if (!UserModel.isActive(user.id)) throw new AppError('This account has been deactivated', 403);
   if (TwoFactorModel.isEnabled(user.id)) {
     // No session yet: the client sends a code with this challenge to /2fa/verify.
     sendSuccess(res, { twoFactorRequired: true, challenge: issueChallenge(user.id) });
@@ -113,8 +114,11 @@ export async function createStaff(req: Request, res: Response): Promise<void> {
   sendSuccess(res, toPublicUser(user), 201);
 }
 
-export async function listStaff(_req: Request, res: Response): Promise<void> {
-  sendSuccess(res, UserModel.list());
+export async function listStaff(req: Request, res: Response): Promise<void> {
+  const pagination = parsePagination(req.query);
+  const items = UserModel.listPaged(pagination.offset, pagination.limit);
+  const total = UserModel.count();
+  paginatedResponse(res, items, total, pagination);
 }
 
 export async function updateStaffRole(req: Request, res: Response): Promise<void> {
@@ -123,4 +127,16 @@ export async function updateStaffRole(req: Request, res: Response): Promise<void
   if (target.id === req.user!.sub) throw new AppError('You cannot change your own role', 400);
   UserModel.updateRole(target.id, (req.body as { role: Role }).role);
   sendSuccess(res, toPublicUser(UserModel.findById(target.id)!));
+}
+
+/** Admin-only: soft-deactivate a staff account by setting their role to 'cashier'
+ *  and marking them inactive. This prevents login without deleting audit history (#148).
+ */
+export async function deactivateStaff(req: Request, res: Response): Promise<void> {
+  const target = UserModel.findById(req.params.id);
+  if (!target) throw notFound('User');
+  if (target.id === req.user!.sub) throw new AppError('You cannot deactivate your own account', 400);
+  if (target.role === 'admin') throw new AppError('Admin accounts cannot be deactivated this way', 403);
+  UserModel.deactivate(target.id);
+  sendSuccess(res, { id: target.id, deactivated: true });
 }
