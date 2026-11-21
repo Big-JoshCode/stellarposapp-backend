@@ -9,6 +9,27 @@ import { config } from '@/config/config';
 let server: Horizon.Server | null = null;
 const horizon = (): Horizon.Server => (server ??= new Horizon.Server(config.stellar.horizonUrl));
 
+// PERF-013: cap concurrent in-flight Horizon requests so an accidental fan-out
+// (e.g. loading balances for every active checkout in parallel) cannot exhaust
+// the HTTP connection pool or trigger Horizon's per-IP rate limit.
+const MAX_CONCURRENT = 8;
+let inflight = 0;
+const waiters: Array<() => void> = [];
+
+async function withConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
+  if (inflight >= MAX_CONCURRENT) {
+    await new Promise<void>((resolve) => waiters.push(resolve));
+  }
+  inflight++;
+  try {
+    return await fn();
+  } finally {
+    inflight--;
+    const next = waiters.shift();
+    if (next) next();
+  }
+}
+
 /** A payment-like operation credited to an account. */
 export interface IncomingPayment {
   pagingToken: string;
@@ -76,58 +97,68 @@ export async function fetchPaymentsSince(
   cursor: string,
   limit = 50,
 ): Promise<{ payments: IncomingPayment[]; cursor: string }> {
-  const page = await horizon()
-    .payments()
-    .forAccount(account)
-    .cursor(cursor)
-    .order('asc')
-    .limit(limit)
-    .call();
-  const records = page.records as unknown as PaymentLike[];
-  const payments = records
-    .map(normalize)
-    .filter((p): p is IncomingPayment => p !== null && p.to === account);
-  const last = records.at(-1);
-  return { payments, cursor: last ? last.paging_token : cursor };
+  return withConcurrencyLimit(async () => {
+    const page = await horizon()
+      .payments()
+      .forAccount(account)
+      .cursor(cursor)
+      .order('asc')
+      .limit(limit)
+      .call();
+    const records = page.records as unknown as PaymentLike[];
+    const payments = records
+      .map(normalize)
+      .filter((p): p is IncomingPayment => p !== null && p.to === account);
+    const last = records.at(-1);
+    return { payments, cursor: last ? last.paging_token : cursor };
+  });
 }
 
 /** The most recent paging token for an account, so a fresh watcher skips history. */
 export async function latestCursor(account: string): Promise<string> {
-  const page = await horizon().payments().forAccount(account).order('desc').limit(1).call();
-  return page.records[0]?.paging_token ?? 'now';
+  return withConcurrencyLimit(async () => {
+    const page = await horizon().payments().forAccount(account).order('desc').limit(1).call();
+    return page.records[0]?.paging_token ?? 'now';
+  });
 }
 
 export async function fetchTransaction(hash: string): Promise<TransactionInfo | null> {
-  try {
-    const tx = await horizon().transactions().transaction(hash).call();
-    return {
-      hash: tx.hash,
-      successful: tx.successful,
-      memo: tx.memo ?? null,
-      memoType: tx.memo_type,
-      sourceAccount: tx.source_account,
-      createdAt: tx.created_at,
-    };
-  } catch (err) {
-    if (err instanceof NotFoundError) return null;
-    throw err;
-  }
+  return withConcurrencyLimit(async () => {
+    try {
+      const tx = await horizon().transactions().transaction(hash).call();
+      return {
+        hash: tx.hash,
+        successful: tx.successful,
+        memo: tx.memo ?? null,
+        memoType: tx.memo_type,
+        sourceAccount: tx.source_account,
+        createdAt: tx.created_at,
+      };
+    } catch (err) {
+      if (err instanceof NotFoundError) return null;
+      throw err;
+    }
+  });
 }
 
 export async function fetchPaymentsInTransaction(hash: string): Promise<IncomingPayment[]> {
-  const page = await horizon().operations().forTransaction(hash).limit(100).call();
-  return (page.records as unknown as PaymentLike[])
-    .map(normalize)
-    .filter((p): p is IncomingPayment => p !== null);
+  return withConcurrencyLimit(async () => {
+    const page = await horizon().operations().forTransaction(hash).limit(100).call();
+    return (page.records as unknown as PaymentLike[])
+      .map(normalize)
+      .filter((p): p is IncomingPayment => p !== null);
+  });
 }
 
 export async function loadBalances(account: string): Promise<Balance[]> {
-  const acct = await horizon().loadAccount(account);
-  return acct.balances.map((b) =>
-    b.asset_type === 'native'
-      ? { assetCode: 'XLM', assetIssuer: null, balance: b.balance }
-      : 'asset_code' in b
-        ? { assetCode: b.asset_code, assetIssuer: b.asset_issuer, balance: b.balance }
-        : { assetCode: b.asset_type, assetIssuer: null, balance: b.balance },
-  );
+  return withConcurrencyLimit(async () => {
+    const acct = await horizon().loadAccount(account);
+    return acct.balances.map((b) =>
+      b.asset_type === 'native'
+        ? { assetCode: 'XLM', assetIssuer: null, balance: b.balance }
+        : 'asset_code' in b
+          ? { assetCode: b.asset_code, assetIssuer: b.asset_issuer, balance: b.balance }
+          : { assetCode: b.asset_type, assetIssuer: null, balance: b.balance },
+    );
+  });
 }
