@@ -18,9 +18,16 @@ import searchRoutes from '@/routes/search.routes';
 import storeRoutes from '@/routes/store.routes';
 import transactionRoutes from '@/routes/transactions.routes';
 import userRoutes from '@/routes/users.routes';
+import { checkHealth } from '@/services/health.service';
 import { connections } from '@/services/realtime';
-import { isDatabaseHealthy } from '@/utils/database';
+import { asyncHandler, sendError } from '@/utils/helpers';
 import { logger } from '@/utils/logger';
+import {
+  METRICS_CONTENT_TYPE,
+  metricsAuthorized,
+  metricsMiddleware,
+  renderMetrics,
+} from '@/utils/metrics';
 
 export function createApp(): express.Express {
   const app = express();
@@ -36,6 +43,7 @@ export function createApp(): express.Express {
       allowedHeaders: ['Content-Type', 'Authorization'],
     }),
   );
+  app.use(metricsMiddleware);
   app.use(
     '/api',
     roleRateLimit(
@@ -55,12 +63,16 @@ export function createApp(): express.Express {
     );
   }
 
-  app.get('/health', (_req, res) => {
-    const database = isDatabaseHealthy() ? 'up' : 'down';
-    // Load balancers take a 503 as "send traffic elsewhere".
-    res.status(database === 'up' ? 200 : 503).json({
-      status: database === 'up' ? 'OK' : 'DEGRADED',
-      database,
+  // Liveness and readiness in one probe: 200 when the database and Horizon both
+  // answer, 503 otherwise. /healthz is the Kubernetes-style alias of /health.
+  // Probe failure details are logged, never returned.
+  const health = asyncHandler(async (_req, res) => {
+    const report = await checkHealth();
+    res.status(report.healthy ? 200 : 503).json({
+      status: report.healthy ? 'OK' : 'DEGRADED',
+      database: report.checks.database,
+      horizon: report.checks.horizon,
+      checks: report.checks,
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version ?? '0.2.0',
       environment: config.env,
@@ -68,6 +80,20 @@ export function createApp(): express.Express {
       sockets: connections.count(),
     });
   });
+  app.get(['/health', '/healthz'], health);
+
+  // Prometheus scrape endpoint. Open unless METRICS_TOKEN is set.
+  app.get(
+    '/metrics',
+    asyncHandler(async (req, res) => {
+      if (!metricsAuthorized(req.headers.authorization)) {
+        sendError(res, 'Metrics require a bearer token', 401);
+        return;
+      }
+      res.set('Content-Type', METRICS_CONTENT_TYPE);
+      res.send(await renderMetrics());
+    }),
+  );
 
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
