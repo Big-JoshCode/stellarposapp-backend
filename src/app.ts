@@ -20,6 +20,7 @@ import paymentRoutes from '@/routes/payments.routes';
 import productRoutes from '@/routes/products.routes';
 import queueRoutes from '@/routes/queues.routes';
 import searchRoutes from '@/routes/search.routes';
+import webhookRoutes from '@/routes/webhooks.routes';
 import stellarRoutes from '@/routes/stellar.routes';
 import storeRoutes from '@/routes/store.routes';
 import transactionRoutes from '@/routes/transactions.routes';
@@ -100,6 +101,7 @@ export function createApp(): express.Express {
   app.use('/api/v1/payments', paymentRoutes);
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/search', searchRoutes);
+  app.use('/api/v1/webhooks', webhookRoutes);
   app.use('/api/v1/audit', auditRoutes);
   app.use('/api/v1/disputes', disputeRoutes);
   app.use('/api/v1/stellar', stellarRoutes);
