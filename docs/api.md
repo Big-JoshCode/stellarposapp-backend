@@ -168,3 +168,13 @@ share one room.
 | `transaction:completed` | the completed sale |
 | `inventory:low` | `[{ id, name, sku, stock, threshold }]` |
 | `analytics:updated` | today's summary (same shape as `GET /analytics/summary`), sent when a sale completes |
+
+## Queues (admin)
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/queues/dead-letters` | admin | Optional `?queue=notifications\|receipts` |
+| POST | `/queues/dead-letters/:id/requeue` | admin | 404 if the id is unknown |
+
+Each entry: `{ id, queue, data, error, stack?, attempts, failedAt }`. The list is in-memory,
+newest first, capped at 100 per queue, and cleared on restart.

@@ -14,6 +14,7 @@ import authRoutes from '@/routes/auth.routes';
 import customerRoutes from '@/routes/customers.routes';
 import paymentRoutes from '@/routes/payments.routes';
 import productRoutes from '@/routes/products.routes';
+import queueRoutes from '@/routes/queues.routes';
 import searchRoutes from '@/routes/search.routes';
 import storeRoutes from '@/routes/store.routes';
 import transactionRoutes from '@/routes/transactions.routes';
@@ -79,6 +80,7 @@ export function createApp(): express.Express {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/search', searchRoutes);
   app.use('/api/v1/audit', auditRoutes);
+  app.use('/api/v1/queues', queueRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

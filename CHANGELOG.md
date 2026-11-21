@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Dead-letter queue inspection and requeue: failed jobs keep id, payload, error, stack and timestamp; admin endpoints `GET /api/v1/queues/dead-letters` and `POST /api/v1/queues/dead-letters/:id/requeue` (#211).
+
 ## [0.2.0]
 
 The first version that boots, serves real data, and takes payments.
