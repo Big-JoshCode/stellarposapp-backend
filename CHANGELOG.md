@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- CI scans the built Docker image with Trivy and fails on fixable HIGH or
+  CRITICAL vulnerabilities.
+
 ## [0.2.0]
 
 The first version that boots, serves real data, and takes payments.
