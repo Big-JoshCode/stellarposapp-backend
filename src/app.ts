@@ -4,17 +4,21 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from '@/config/config';
+import { apiVersion, unsupportedApiVersion } from '@/middleware/apiVersion.middleware';
 import { auditTrail } from '@/middleware/audit.middleware';
 import { errorHandler } from '@/middleware/error.middleware';
+import { responseTime } from '@/middleware/responseTime.middleware';
 import { notFoundHandler } from '@/middleware/notFound.middleware';
 import { DEFAULT_ROLE_LIMITS, roleRateLimit } from '@/middleware/rateLimit.middleware';
 import analyticsRoutes from '@/routes/analytics.routes';
+import merchantRoutes from '@/routes/merchant.routes';
 import auditRoutes from '@/routes/audit.routes';
 import authRoutes from '@/routes/auth.routes';
 import customerRoutes from '@/routes/customers.routes';
 import disputeRoutes from '@/routes/disputes.routes';
 import paymentRoutes from '@/routes/payments.routes';
 import productRoutes from '@/routes/products.routes';
+import queueRoutes from '@/routes/queues.routes';
 import searchRoutes from '@/routes/search.routes';
 import stellarRoutes from '@/routes/stellar.routes';
 import storeRoutes from '@/routes/store.routes';
@@ -49,6 +53,20 @@ export function createApp(): express.Express {
   );
   app.use(express.json({ limit: '100kb' }));
   app.use('/api', auditTrail);
+  // Compress all responses larger than 1 KB (#155). The filter skips
+  // already-compressed content types (images, video, zip) so the CPU cost of
+  // attempting a second compression pass is never paid for binary downloads.
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
+        const type = res.getHeader('Content-Type');
+        if (typeof type === 'string' && /image|video|audio|zip|gzip|br/.test(type)) return false;
+        return compression.filter(req, res);
+      },
+    }),
+  );
+  app.use(responseTime);
   app.use(compression());
   if (!config.isTest) {
     app.use(
@@ -72,6 +90,7 @@ export function createApp(): express.Express {
     });
   });
 
+  app.use('/api/v1', apiVersion('1'));
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/store', storeRoutes);
@@ -85,6 +104,9 @@ export function createApp(): express.Express {
   app.use('/api/v1/disputes', disputeRoutes);
   app.use('/api/v1/stellar', stellarRoutes);
   app.use('/api/v1/transactions', transactionStreamRoutes);
+  app.use('/api/v1/merchant', merchantRoutes);
+  app.use('/api/v1/queues', queueRoutes);
+  app.use(unsupportedApiVersion(['1']));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
