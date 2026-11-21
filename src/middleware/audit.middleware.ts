@@ -5,7 +5,9 @@ import { logger } from '@/utils/logger';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Credentials never belong in an audit trail, even as a path.
-const SKIP = [/^\/api\/v1\/auth\/(login|register)$/];
+// GDPR erasure is skipped too: the audit row would be written after the erasure
+// and would put the subject's email back. The erasure receipt is the record instead.
+const SKIP = [/^\/api\/v1\/auth\/(login|register)$/, /^\/api\/v1\/users\/[^/]+\/data$/];
 
 /**
  * Records every successful state-changing API call: who, what, when, from
