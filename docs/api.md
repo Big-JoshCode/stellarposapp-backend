@@ -4,6 +4,8 @@ Base URL: `http://localhost:3000/api/v1`. Send JSON with
 `Content-Type: application/json`. Authenticated routes need
 `Authorization: Bearer <token>` from `/auth/login` or `/auth/register`.
 
+**Versioning.** See the [versioning policy](versioning.md) for breaking changes and deprecation.
+
 **Envelope.** Success responses look like `{ "success": true, "data": ... }`.
 Errors look like `{ "success": false, "error": "message", "details"?: [{ "field", "message" }] }`.
 Paginated lists add `"pagination": { "page", "limit", "total", "pages" }`
@@ -216,3 +218,13 @@ share one room.
 | `transaction:completed` | the completed sale |
 | `inventory:low` | `[{ id, name, sku, stock, threshold }]` |
 | `analytics:updated` | today's summary (same shape as `GET /analytics/summary`), sent when a sale completes |
+
+## Queues (admin)
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/queues/dead-letters` | admin | Optional `?queue=notifications\|receipts` |
+| POST | `/queues/dead-letters/:id/requeue` | admin | 404 if the id is unknown |
+
+Each entry: `{ id, queue, data, error, stack?, attempts, failedAt }`. The list is in-memory,
+newest first, capped at 100 per queue, and cleared on restart.

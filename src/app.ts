@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from '@/config/config';
+import { apiVersion, unsupportedApiVersion } from '@/middleware/apiVersion.middleware';
 import { auditTrail } from '@/middleware/audit.middleware';
 import { errorHandler } from '@/middleware/error.middleware';
 import { notFoundHandler } from '@/middleware/notFound.middleware';
@@ -14,6 +15,7 @@ import authRoutes from '@/routes/auth.routes';
 import customerRoutes from '@/routes/customers.routes';
 import paymentRoutes from '@/routes/payments.routes';
 import productRoutes from '@/routes/products.routes';
+import queueRoutes from '@/routes/queues.routes';
 import searchRoutes from '@/routes/search.routes';
 import storeRoutes from '@/routes/store.routes';
 import transactionRoutes from '@/routes/transactions.routes';
@@ -69,6 +71,7 @@ export function createApp(): express.Express {
     });
   });
 
+  app.use('/api/v1', apiVersion('1'));
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/store', storeRoutes);
@@ -79,6 +82,8 @@ export function createApp(): express.Express {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/search', searchRoutes);
   app.use('/api/v1/audit', auditRoutes);
+  app.use('/api/v1/queues', queueRoutes);
+  app.use(unsupportedApiVersion(['1']));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
