@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { config } from '@/config/config';
 import { auditTrail } from '@/middleware/audit.middleware';
 import { errorHandler } from '@/middleware/error.middleware';
+import { responseTime } from '@/middleware/responseTime.middleware';
 import { notFoundHandler } from '@/middleware/notFound.middleware';
 import { DEFAULT_ROLE_LIMITS, roleRateLimit } from '@/middleware/rateLimit.middleware';
 import analyticsRoutes from '@/routes/analytics.routes';
@@ -46,6 +47,7 @@ export function createApp(): express.Express {
   );
   app.use(express.json({ limit: '100kb' }));
   app.use('/api', auditTrail);
+  app.use(responseTime);
   app.use(compression());
   if (!config.isTest) {
     app.use(
